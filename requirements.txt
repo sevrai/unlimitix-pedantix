@@ -1,0 +1,8 @@
+Pillow
+wikipedia
+pandas
+spacy
+fuzzywuzzy
+animation
+unidecode
+https://huggingface.co/spacy/fr_core_news_md/resolve/main/fr_core_news_md-any-py3-none-any.whl
