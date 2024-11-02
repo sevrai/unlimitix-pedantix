@@ -3,10 +3,9 @@ import pandas as pd
 import os
 import spacy
 from spacy.tokens import Token
-import animation
 import sys
 
-modules = ["wikipedia","pandas","tqdm","spacy","fuzzywuzzy","animation","unidecode"]
+modules = ["wikipedia","pandas","tqdm","spacy"]
 for name in modules:
     if name not in sys.modules:
         print(f"<!> WARNING ({name}) : make sure you've installed all dependencies (pip install -r requirements.txt) <!>")
@@ -14,11 +13,10 @@ for name in modules:
 
 class ConsolePedantix():
     
-    @animation.wait()
-    def __init__(self) -> None:
+    def __init__(self, page_name = None) -> None:
         os.system("clear")
         print("Loading")
-        self.page = self.retrieve_page()
+        self.page = self.retrieve_page(page_name)
         self.title = self.page.title
 
         self.nlp = spacy.load('fr_core_news_md')
@@ -31,7 +29,47 @@ class ConsolePedantix():
 
         self.doc_title = self.nlp(self.title)
         self.doc = self.nlp(self.page.summary)
+
+        self.to_json()
         pass
+    
+    def to_json(self):
+        return {
+            "title": [self.to_token_json(token, i) for i, token in enumerate(self.doc_title)],
+            "content": [self.to_token_json(token, i + len(self.doc_title)) for i, token in enumerate(self.doc)],
+        }
+    
+    def to_token_json(self, token, id):
+        return {
+            "id": id,
+            "length": len(token.text),
+            "display": token.text if token._.show else None,
+            "found": True if token._.show else False,
+            "whitespace": token.whitespace_
+        }
+
+    def guess_word(self, game_id : str, word : str):
+        # check similarity with all tokens from title+content
+        self.last_word = self.nlp(word.lower())
+        similarity_scores = {}
+        if (self.last_word.vector_norm):
+            self.tested_words.add(self.last_word)
+            for i, token in enumerate([*self.doc_title, *self.doc]):
+                sim = self.nlp(word.lower()).similarity(self.nlp(token.lower_)) if token.vector_norm else 0
+                if sim == 1:
+                    similarity_scores[str(i)] = token.text
+                    self.found_words.add(token.lower_)
+                elif sim > 0.6:
+                    similarity_scores[str(i)] = sim
+        
+        if self.check_end():
+            for i, token in enumerate([*self.doc_title, *self.doc]):
+                similarity_scores[str(i)] = token.text
+        # map to an object with keys as token index and values as similarity score
+        return {
+            "word": word,
+            "matches": similarity_scores
+        }
 
     def show_image(self):
         from PIL import Image
@@ -49,20 +87,19 @@ class ConsolePedantix():
             img.show()
             os.remove(f"data/{self.page.title}.jpg")
 
-    def retrieve_page(self):
-        most_popular_pages = pd.read_csv('./data/pages_les_plus_consultees.csv').iloc[:,2]
+    def retrieve_page(self, page_name = None):
         wikipedia.set_lang("fr")
-        page_found = False
-        while not page_found:
-            try:
-                random_article = most_popular_pages.sample(1)
-                page = wikipedia.page(random_article)
-                page_found = True
-            except wikipedia.exceptions.PageError:
-                pass
+        if not page_name:
+            most_popular_pages = pd.read_csv('./data/pages_les_plus_consultees.csv').iloc[:,2]
+            page_name = most_popular_pages.sample(1)
+        try:
+            page = wikipedia.page(page_name)
+            page_found = True
+        except wikipedia.exceptions.PageError:
+            pass
         return page
 
-    def check_end(self, q_pressed : bool):
+    def check_end(self, q_pressed = False):
         return (all(token._.show for token in self.doc_title)) or q_pressed
     
     def show(self):
@@ -115,12 +152,6 @@ class ConsolePedantix():
                 sim = self.last_word.similarity(self.nlp(token.lower_)) if token.vector_norm else 0
                 if sim > 0.8:
                     self.found_words.add(token.lower_)
-
-
-
-pedantix = ConsolePedantix()
-pedantix.play()
-
 
 
 
